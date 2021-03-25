@@ -19,7 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.*/
 
 'use strict';
 
-let exports; // eslint-disable-line
+var exports; // eslint-disable-line
 const path = require('path');
 const ZSchema = require('z-schema');
 const MIMEtype = require('whatwg-mimetype');
