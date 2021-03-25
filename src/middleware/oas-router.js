@@ -19,23 +19,23 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.*/
 
 'use strict';
 
-var exports; // eslint-disable-line
-var path = require('path');
-var ZSchema = require("z-schema");
-var MIMEtype = require('whatwg-mimetype');
-var config = require('../configurations'),
-    logger = config.logger;
-var validator = new ZSchema({
+let exports; // eslint-disable-line
+const path = require('path');
+const ZSchema = require('z-schema');
+const MIMEtype = require('whatwg-mimetype');
+const config = require('../configurations'),
+   logger = config.logger;
+const validator = new ZSchema({
   ignoreUnresolvableReferences: true,
   ignoreUnknownFormats: config.ignoreUnknownFormats,
-  breakOnFirstError: false
+  breakOnFirstError: false,
 });
-var utils = require("../lib/utils.js");
-var controllers; // eslint-disable-line
+const utils = require('../lib/utils.js');
+let controllers; // eslint-disable-line
 
 function getExpectedResponse(responses, code) {
   // Exact match wins over range definitions (1XX, 2XX, 3XX, 4XX, 5XX)
-  var resp = responses[code];
+  let resp = responses[code];
   if (resp !== undefined) {
     return resp;
   }
@@ -81,25 +81,29 @@ function stripUndefinedKeys(data, maxDepth = 1024) {
  * @param {object} content - Data sent from controller to client.
  */
 function checkResponse(req, res, oldSend, oasDoc, method, requestedSpecPath, content) {
-  var code = res.statusCode;
-  var explicitType;
-  var msg = [];
-  var data = stripUndefinedKeys(content[0]);
+  let newErr;
+  const code = res.statusCode;
+  let explicitType;
+  const msg = [];
+  const data = stripUndefinedKeys(content[0]);
+  /*
   logger.debug("Processing at checkResponse:");
   logger.debug("  -code: " + code);
   logger.debug("  -oasDoc: " + JSON.stringify(oasDoc));
   logger.debug("  -method: " + method);
   logger.debug("  -requestedSpecPath: " + requestedSpecPath);
   logger.debug("  -data: " + JSON.stringify(data));
-  var responseCodeSection = getExpectedResponse(oasDoc.paths[requestedSpecPath][method].responses, code); //Section of the oasDoc file starting at a response code
+   */
+  const responseCodeSection = getExpectedResponse(
+     oasDoc.paths[requestedSpecPath][method].responses, code); //Section of the oasDoc file starting at a response code
   if (res.get('content-type') === undefined) {
     res.header("Content-Type", "application/json;charset=utf-8");
   } else {
     explicitType = new MIMEtype(res.get('content-type'));
   }
   if (responseCodeSection === undefined) { //if the code is undefined, data wont be checked as a status code is needed to retrieve 'schema' from the oasDoc file
-    var newErr = {
-      message: "Wrong response code: " + code
+    newErr = {
+      message: 'Wrong response code: ' + code,
     };
     msg.push(newErr);
     if (config.strict === true) {
@@ -111,15 +115,15 @@ function checkResponse(req, res, oldSend, oasDoc, method, requestedSpecPath, con
       oldSend.apply(res, content);
     }
   } else if (responseCodeSection.hasOwnProperty('content')) {
-    var resultType;
-    var acceptTypes = [];
+    let resultType;
+    let acceptTypes = [];
     if (req.headers.accept) {
       acceptTypes = req.headers.accept.split(',').map((type) => {
         return type.trim();
       });
     }
     acceptTypes.forEach((acceptType) => {
-      var mimeAccept = new MIMEtype(acceptType);
+      const mimeAccept = new MIMEtype(acceptType);
       Object.keys(responseCodeSection.content).forEach((contentType) => {
         if (!resultType) {
           var firstMatch, secondMatch;
@@ -154,12 +158,12 @@ function checkResponse(req, res, oldSend, oasDoc, method, requestedSpecPath, con
     }
     if (resultType && resultType.essence === 'application/json') {
       //if there is no content property for the given response then there is nothing to validate.
-      var validSchema = responseCodeSection.content['application/json'].schema;
+      const validSchema = responseCodeSection.content['application/json'].schema;
       utils.fixNullable(validSchema)
 
       content[0] = JSON.stringify(content[0]);
       logger.debug("Schema to use for validation: " + JSON.stringify(validSchema));
-      var err = validator.validate(JSON.parse(content[0]), validSchema);
+      const err = validator.validate(JSON.parse(content[0]), validSchema);
       if (err === false) {
         newErr = {
           message: "Wrong data in the response. ",
@@ -223,10 +227,10 @@ function getOpId(oasDoc, requestedSpecPath, method) {
 module.exports = (controllers) => {
   return function OASRouter(req, res, next) {
 
-    var oasDoc = res.locals.oasDoc;
-    var requestedSpecPath = res.locals.requestedSpecPath; //requested path version on the oasDoc file of the requested url
-    var method = req.method.toLowerCase();
-    var controllerName;
+    const oasDoc = res.locals.oasDoc;
+    const requestedSpecPath = res.locals.requestedSpecPath; //requested path version on the oasDoc file of the requested url
+    const method = req.method.toLowerCase();
+    let controllerName;
 
     // pgillis 2019 Jun 10
     // Handle case where the path has an x-swagger-router-controller.
@@ -252,16 +256,18 @@ module.exports = (controllers) => {
       controllerName = "Default";
     }
 
-    var opID = getOpId(oasDoc, requestedSpecPath, method);
+    const opID = getOpId(oasDoc, requestedSpecPath, method);
 
-    var controller = require(path.join(controllers, controllerName));
-
-    var oldSend = res.send;
+    const controller = require(path.join(controllers, controllerName));
+/* André : don't check response against swagger specification
+    const oldSend = res.send;
     res.send = function (data) { // eslint-disable-line
       //intercept the response from the controller to check and validate it
       //Avoids res.send being executed twice: https://stackoverflow.com/questions/41489528/why-is-res-send-being-called-twice
       checkResponse(req, res, oldSend, oasDoc, method, requestedSpecPath, arguments); // eslint-disable-line
     }
+
+ */
     controller[opID].apply(undefined, [req, res, next]); // execute function by name
   }
 }
